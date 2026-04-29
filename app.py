@@ -28,12 +28,20 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 🐝 로고와 타이틀을 나란히 배치
+# 🐝 로고 자동 감지 및 타이틀 배치
 col_logo, col_title = st.columns([1, 9])
 with col_logo:
-    # 깃허브에 logo.jpg 파일이 있으면 보여주고, 없으면 기본 🐝 이모지 출력
-    if os.path.exists("logo.jpg"):
-        st.image("logo.jpg", use_container_width=True)
+    # 💡 [핵심 수정] 다양한 로고 파일명과 확장자를 모두 감지하도록 수정
+    logo_file = None
+    possible_names = ["logo.png", "logo.jpg", "logo.jpeg", "Team Logo.png", "Team Logo.jpg"]
+    
+    for name in possible_names:
+        if os.path.exists(name):
+            logo_file = name
+            break
+            
+    if logo_file:
+        st.image(logo_file, use_container_width=True)
     else:
         st.markdown("<div style='font-size: 50px; text-align: center;'>🐝</div>", unsafe_allow_html=True)
 
@@ -54,14 +62,13 @@ if menu == "1. 회원 명단 및 등번호":
     try:
         df_all = pd.read_csv(members_url)
         
-        # 💡 [버그 수정] 무작정 첫 번째 열을 지우지 않고, 이름이 '등번호'인 열만 찾아서 소수점 제거!
         if '등번호' in df_all.columns:
             df_all['등번호'] = pd.to_numeric(df_all['등번호'], errors='coerce').astype('Int64').astype(str)
             df_all['등번호'] = df_all['등번호'].replace('<NA>', '')
             
         df_all = df_all.fillna("")
         
-        # 구분 열(또는 전체)에서 해당 단어 찾기
+        # 구분 열에서 단어 찾기
         mask_kinder = df_all.apply(lambda row: row.astype(str).str.contains('유치').any(), axis=1)
         mask_low = df_all.apply(lambda row: row.astype(str).str.contains('저학').any(), axis=1)
         mask_high = df_all.apply(lambda row: row.astype(str).str.contains('고학').any(), axis=1)
@@ -70,14 +77,11 @@ if menu == "1. 회원 명단 및 등번호":
         df_low = df_all[mask_low]
         df_high = df_all[mask_high]
         
-        # 💡 [버그 수정] 배번판을 그릴 때 정확히 '등번호'와 '성명' 열을 찾아오도록 수정
         def get_num_map_safe(df):
             if df.empty: return {}
-            # 시트에 '등번호', '성명' 열이 있다고 가정
             if '등번호' in df.columns and '성명' in df.columns:
                 temp = df[['등번호', '성명']].copy()
             elif len(df.columns) >= 3:
-                # 만약 이름을 다르게 썼다면, 2번째(인덱스1)와 3번째(인덱스2) 열을 강제로 가져옴
                 temp = df.iloc[:, [1, 2]].copy() 
             else:
                 return {}
@@ -97,9 +101,11 @@ if menu == "1. 회원 명단 및 등번호":
         col1_left, col1_right = st.columns([4, 6])
         with col1_left:
             st.markdown("#### 🐣 유치부 명단")
-            st.dataframe(df_kinder, use_container_width=True, hide_index=True)
+            # 💡 [핵심 수정] 화면에 그릴 때만 '구분' 열을 숨김 처리 (drop)
+            st.dataframe(df_kinder.drop(columns=['구분'], errors='ignore'), use_container_width=True, hide_index=True)
+            
             st.markdown("#### 🟡 저학년 명단")
-            st.dataframe(df_low, use_container_width=True, hide_index=True)
+            st.dataframe(df_low.drop(columns=['구분'], errors='ignore'), use_container_width=True, hide_index=True)
             
         with col1_right:
             st.markdown("#### 🔢 유치부 + 저학년 통합 배번 현황")
@@ -121,7 +127,7 @@ if menu == "1. 회원 명단 및 등번호":
         col2_left, col2_right = st.columns([4, 6])
         with col2_left:
             st.markdown("#### ⚫ 고학년 (대회반) 명단")
-            st.dataframe(df_high, use_container_width=True, hide_index=True)
+            st.dataframe(df_high.drop(columns=['구분'], errors='ignore'), use_container_width=True, hide_index=True)
             
         with col2_right:
             st.markdown("#### 🔢 고학년 배번 현황")
@@ -136,7 +142,7 @@ if menu == "1. 회원 명단 및 등번호":
             st.markdown(grid_html_high, unsafe_allow_html=True)
             
     except Exception as e:
-        st.error(f"데이터를 불러올 수 없습니다. 시트의 열 이름('등번호', '성명' 등)을 확인해 주세요. 상세 오류: {e}")
+        st.error(f"데이터를 불러올 수 없습니다. 오류: {e}")
 
 # ----------------------------------------------------
 # [메뉴 2] 대회 및 시합 일정 (달력)
