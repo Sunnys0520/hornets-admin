@@ -7,7 +7,7 @@ import os
 # 1. 페이지 기본 설정
 st.set_page_config(page_title="호네츠(Hornets) 관리자", layout="wide")
 
-# 2. 전체 화면 스타일 및 폰트 크기 설정
+# 2. 전체 화면 스타일
 st.markdown("""
     <style>
     .main-title { font-size: 46px; font-weight: 900; letter-spacing: -0.5px; padding-bottom: 25px; line-height: 1.2; text-shadow: 2px 2px 0px #CBA052; margin-top: 10px;}
@@ -28,30 +28,22 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 🐝 팀 로고 및 타이틀 배치
+# 🐝 로고 및 타이틀
 col_logo, col_title = st.columns([1, 9])
 with col_logo:
-    logo_file = None
-    possible_names = ["logo.png", "logo.jpg", "logo.jpeg", "Team Logo.png", "Team Logo.jpg"]
-    for name in possible_names:
-        if os.path.exists(name):
-            logo_file = name
-            break
-    if logo_file:
-        st.image(logo_file, use_container_width=True)
-    else:
-        st.markdown("<div style='font-size: 50px; text-align: center;'>🐝</div>", unsafe_allow_html=True)
+    logo_file = next((name for name in ["logo.png", "logo.jpg", "logo.jpeg", "Team Logo.png", "Team Logo.jpg"] if os.path.exists(name)), None)
+    if logo_file: st.image(logo_file, use_container_width=True)
+    else: st.markdown("<div style='font-size: 50px; text-align: center;'>🐝</div>", unsafe_allow_html=True)
 
 with col_title:
     st.markdown('<div class="main-title">HORNETS 하키팀 관리 페이지</div>', unsafe_allow_html=True)
 
-# 💡 [수정 1] 메뉴 순서 완전 스와프 (달력이 1번으로 강제 고정됨)
 menu = st.sidebar.radio("메뉴 이동", ["1. 대회 및 시합 일정 (달력)", "2. 회원 명단 및 등번호"])
 
 base_url = "https://docs.google.com/spreadsheets/d/1Z2QYy2bubBdkj6B-ojk_wPO717TSC2eJbXafCIsXY7U/export?format=csv&gid="
 
 # ----------------------------------------------------
-# [메뉴 1] 대회 및 시합 일정 (달력) - 이제 1페이지로 등장!
+# [메뉴 1] 대회 및 시합 일정 (달력 구역)
 # ----------------------------------------------------
 if menu == "1. 대회 및 시합 일정 (달력)":
     st.subheader("📅 호네츠 시합 & 행사 달력")
@@ -65,15 +57,13 @@ if menu == "1. 대회 및 시합 일정 (달력)":
             df_schedule['parsed_date'] = pd.to_datetime(df_schedule[date_col], errors='coerce')
             valid_sched = df_schedule.dropna(subset=['parsed_date'])
             
-            tab_cal_all, tab_cal1, tab_cal2, tab_cal3, tab_cal4, tab_cal5 = st.tabs(
-                ["📊 통합 달력", "1학년", "2학년", "3학년", "4학년", "4,5,6학년"]
+            tab_cal_all, tab_cal1, tab_cal2, tab_cal12, tab_cal3, tab_cal4, tab_cal34, tab_cal_hexa = st.tabs(
+                ["📊 통합 달력", "1학년", "2학년", "12학년", "3학년", "4학년", "34학년", "헥사"]
             )
             
             col_y, col_m, _ = st.columns([2, 2, 6])
-            with col_y:
-                sel_year = st.selectbox("년도 선택", range(2024, 2030), index=2)
-            with col_m:
-                sel_month = st.selectbox("월 선택", range(1, 13), index=datetime.today().month-1)
+            with col_y: sel_year = st.selectbox("년도 선택", range(2024, 2030), index=2)
+            with col_m: sel_month = st.selectbox("월 선택", range(1, 13), index=datetime.today().month-1)
                 
             cal = calendar.Calendar(firstweekday=6)
             month_days = cal.monthdatescalendar(sel_year, sel_month)
@@ -90,48 +80,72 @@ if menu == "1. 대회 및 시합 일정 (달력)":
                         day_events = valid_sched[valid_sched['parsed_date'].dt.date == day]
                         
                         for _, ev in day_events.iterrows():
-                            # 전체 텍스트 수집 후 '띄어쓰기'를 완전히 제거하여 인식률 100%로 상향
+                            # 💡 [해결책] 날짜와 합쳐지지 않게 오직 '구분(K열)' 칸만 완전히 독립적으로 검사합니다.
+                            grade_col_name = None
+                            if '구분' in df_schedule.columns:
+                                grade_col_name = '구분'
+                            elif len(df_schedule.columns) >= 11:
+                                grade_col_name = df_schedule.columns[10] # K열 타겟팅
+                                
+                            # 구분 칸의 공백 및 기호 제거
+                            grade_val = str(ev[grade_col_name]).strip().replace(" ", "").replace(",", "").replace("/", "").replace("-", "") if grade_col_name else ""
                             row_text_full = " ".join([str(ev[c]) for c in df_schedule.columns])
-                            row_text_clean = row_text_full.replace(" ", "")
                             
-                            # 타겟 학년 필터링 (띄어쓰기 무시)
-                            if target_grade and target_grade.replace(" ", "") not in row_text_clean:
-                                continue
+                            # 오직 구분 열의 값만을 기준으로 엄격하게 판정 (날짜 기포 함량 차단)
+                            is_hexa = any(k in grade_val for k in ['헥사', '456학년', '456'])
+                            is_12 = any(k in grade_val for k in ['12학년', '12'])
+                            is_34 = any(k in grade_val for k in ['34학년', '34'])
+                            is_1 = ('1학년' in grade_val or grade_val == '1') and not is_12
+                            is_2 = ('2학년' in grade_val or grade_val == '2') and not is_12
+                            is_3 = ('3학년' in grade_val or grade_val == '3') and not is_34
+                            is_4 = ('4학년' in grade_val or grade_val == '4') and not is_34 and not is_hexa
+                            
+                            # 혹시나 구분 열이 누락되었을 때를 위한 안전 장치(하위 호환 폴백)
+                            if not grade_val:
+                                is_hexa = '헥사' in row_text_full
+                                is_12 = '12학년' in row_text_full
+                                is_34 = '34학년' in row_text_full or '3/4학년' in row_text_full
+                                is_1 = '1학년' in row_text_full and not is_12
+                                is_2 = '2학년' in row_text_full and not is_12
+                                is_3 = '3학년' in row_text_full and not is_34
+                                is_4 = '4학년' in row_text_full and not is_34 and not is_hexa
+                            
+                            # 탭 필터링
+                            if target_grade == "헥사" and not is_hexa: continue
+                            if target_grade == "12학년" and not is_12: continue
+                            if target_grade == "34학년" and not is_34: continue
+                            if target_grade == "1학년" and not is_1: continue
+                            if target_grade == "2학년" and not is_2: continue
+                            if target_grade == "3학년" and not is_3: continue
+                            if target_grade == "4학년" and not is_4: continue
                                 
                             event_bg = "#f0f2f6"; event_color = "#333"; border = "1px solid #ddd"
                             
-                            # 💡 [수정 2] 첨부해 준 이미지 색상 정확도 200% 매칭 및 띄어쓰기 무시 적용
-                            if '4,5,6학년' in row_text_clean:
-                                event_bg = "#CC0000" # 진한 빨강
-                                event_color = "#FFFFFF" 
-                                border = "1px solid #990000"
-                            elif '1학년' in row_text_clean:
-                                event_bg = "#FF00FF" # 쨍한 마젠타(자홍)
-                                event_color = "#FFFFFF" 
-                                border = "1px solid #CC00CC"
-                            elif '2학년' in row_text_clean:
-                                event_bg = "#00FF00" # 밝은 연두/라임 (검정 글씨)
-                                event_color = "#000000" 
-                                border = "1px solid #00CC00"
-                            elif '3학년' in row_text_clean:
-                                event_bg = "#003366" # 다크 네이비
-                                event_color = "#FFFFFF"
-                                border = "1px solid #001A33"
-                            elif '4학년' in row_text_clean:
-                                event_bg = "#9900FF" # 진한 보라
-                                event_color = "#FFFFFF"
-                                border = "1px solid #6600CC"
+                            # 독자적인 전용 배경색 부여
+                            if is_hexa:
+                                event_bg = "#CC0000"; event_color = "#FFFFFF"; border = "1px solid #990000"
+                            elif is_12:
+                                event_bg = "#FF8C00"; event_color = "#000000"; border = "1px solid #D2691E"
+                            elif is_34:
+                                event_bg = "#00BFFF"; event_color = "#000000"; border = "1px solid #009ACD"
+                            elif is_1:
+                                event_bg = "#FF00FF"; event_color = "#FFFFFF"; border = "1px solid #CC00CC"
+                            elif is_2:
+                                event_bg = "#00FF00"; event_color = "#000000"; border = "1px solid #00CC00"
+                            elif is_3:
+                                event_bg = "#003366"; event_color = "#FFFFFF"; border = "1px solid #001A33"
+                            elif is_4:
+                                event_bg = "#9900FF"; event_color = "#FFFFFF"; border = "1px solid #6600CC"
                             else:
-                                # 학년이 없을 때의 기본 테마 색상 적용
-                                if ('호네츠' in row_text_clean or '헥사' in row_text_clean) and ('참가멤버' not in str(df_schedule.columns).replace(" ","")):
+                                if ('호네츠' in row_text_full or '헥사' in row_text_full) and ('참가멤버' not in str(df_schedule.columns)):
                                     event_bg = "#ffd966"; event_color = "#000"
-                                if '화이트' in row_text_clean:
+                                if '화이트' in row_text_full:
                                     event_bg = "#ffffff"; event_color = "#000"; border = "1px solid #ccc"
-                                elif '블랙' in row_text_clean:
+                                elif '블랙' in row_text_full:
                                     event_bg = "#1a1a1a"; event_color = "#fff"
-                                elif '버건디' in row_text_clean:
+                                elif '버건디' in row_text_full:
                                     event_bg = "#800020"; event_color = "#fff"
-                                elif '베이지' in row_text_clean:
+                                elif '베이지' in row_text_full:
                                     event_bg = "#F5F5DC"; event_color = "#000"
                                     
                             display_text = ""
@@ -148,9 +162,11 @@ if menu == "1. 대회 및 시합 일정 (달력)":
             with tab_cal_all: st.markdown(generate_calendar_html(target_grade=None), unsafe_allow_html=True)
             with tab_cal1: st.markdown(generate_calendar_html(target_grade="1학년"), unsafe_allow_html=True)
             with tab_cal2: st.markdown(generate_calendar_html(target_grade="2학년"), unsafe_allow_html=True)
+            with tab_cal12: st.markdown(generate_calendar_html(target_grade="12학년"), unsafe_allow_html=True)
             with tab_cal3: st.markdown(generate_calendar_html(target_grade="3학년"), unsafe_allow_html=True)
             with tab_cal4: st.markdown(generate_calendar_html(target_grade="4학년"), unsafe_allow_html=True)
-            with tab_cal5: st.markdown(generate_calendar_html(target_grade="4,5,6학년"), unsafe_allow_html=True)
+            with tab_cal34: st.markdown(generate_calendar_html(target_grade="34학년"), unsafe_allow_html=True)
+            with tab_cal_hexa: st.markdown(generate_calendar_html(target_grade="헥사"), unsafe_allow_html=True)
                 
             with st.expander("📝 전체 일정 원본 표로 보기"):
                 st.dataframe(df_schedule.drop(columns=['parsed_date'], errors='ignore'), use_container_width=True, hide_index=True)
@@ -160,7 +176,7 @@ if menu == "1. 대회 및 시합 일정 (달력)":
         st.error(f"일정 데이터를 불러올 수 없습니다. 오류: {e}")
 
 # ----------------------------------------------------
-# [메뉴 2] 회원 명단 및 등번호 - 이제 2페이지로 이동!
+# [메뉴 2] 회원 명단 및 등번호
 # ----------------------------------------------------
 elif menu == "2. 회원 명단 및 등번호":
     st.subheader("📋 2. 회원 명단 및 등번호 현황")
