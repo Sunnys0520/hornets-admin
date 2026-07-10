@@ -80,35 +80,17 @@ if menu == "1. 대회 및 시합 일정 (달력)":
                         day_events = valid_sched[valid_sched['parsed_date'].dt.date == day]
                         
                         for _, ev in day_events.iterrows():
-                            # 💡 [해결책] 날짜와 합쳐지지 않게 오직 '구분(K열)' 칸만 완전히 독립적으로 검사합니다.
-                            grade_col_name = None
-                            if '구분' in df_schedule.columns:
-                                grade_col_name = '구분'
-                            elif len(df_schedule.columns) >= 11:
-                                grade_col_name = df_schedule.columns[10] # K열 타겟팅
-                                
-                            # 구분 칸의 공백 및 기호 제거
-                            grade_val = str(ev[grade_col_name]).strip().replace(" ", "").replace(",", "").replace("/", "").replace("-", "") if grade_col_name else ""
                             row_text_full = " ".join([str(ev[c]) for c in df_schedule.columns])
                             
-                            # 오직 구분 열의 값만을 기준으로 엄격하게 판정 (날짜 기포 함량 차단)
-                            is_hexa = any(k in grade_val for k in ['헥사', '456학년', '456'])
-                            is_12 = any(k in grade_val for k in ['12학년', '12'])
-                            is_34 = any(k in grade_val for k in ['34학년', '34'])
-                            is_1 = ('1학년' in grade_val or grade_val == '1') and not is_12
-                            is_2 = ('2학년' in grade_val or grade_val == '2') and not is_12
-                            is_3 = ('3학년' in grade_val or grade_val == '3') and not is_34
-                            is_4 = ('4학년' in grade_val or grade_val == '4') and not is_34 and not is_hexa
+                            # 💡 [초강력 업데이트] 각 칸별로 독립 검사하여 '날짜 숫자'와 '학년 숫자'가 붙는 버그 원천 차단
+                            is_hexa = any(any(k in str(ev[c]).replace(" ","") for k in ['헥사', '456학년', '456']) for c in df_schedule.columns)
+                            is_12 = any(any(k in str(ev[c]).replace(" ","") for k in ['12학년', '12']) for c in df_schedule.columns)
+                            is_34 = any(any(k in str(ev[c]).replace(" ","") for k in ['34학년', '34', '3/4']) for c in df_schedule.columns)
                             
-                            # 혹시나 구분 열이 누락되었을 때를 위한 안전 장치(하위 호환 폴백)
-                            if not grade_val:
-                                is_hexa = '헥사' in row_text_full
-                                is_12 = '12학년' in row_text_full
-                                is_34 = '34학년' in row_text_full or '3/4학년' in row_text_full
-                                is_1 = '1학년' in row_text_full and not is_12
-                                is_2 = '2학년' in row_text_full and not is_12
-                                is_3 = '3학년' in row_text_full and not is_34
-                                is_4 = '4학년' in row_text_full and not is_34 and not is_hexa
+                            is_1 = any(('1학년' in str(ev[c]).replace(" ","") or str(ev[c]).strip() == '1') for c in df_schedule.columns) and not is_12
+                            is_2 = any(('2학년' in str(ev[c]).replace(" ","") or str(ev[c]).strip() == '2') for c in df_schedule.columns) and not is_12
+                            is_3 = any(('3학년' in str(ev[c]).replace(" ","") or str(ev[c]).strip() == '3') for c in df_schedule.columns) and not is_34
+                            is_4 = any(('4학년' in str(ev[c]).replace(" ","") or str(ev[c]).strip() == '4') for c in df_schedule.columns) and not is_34 and not is_hexa
                             
                             # 탭 필터링
                             if target_grade == "헥사" and not is_hexa: continue
@@ -121,7 +103,7 @@ if menu == "1. 대회 및 시합 일정 (달력)":
                                 
                             event_bg = "#f0f2f6"; event_color = "#333"; border = "1px solid #ddd"
                             
-                            # 독자적인 전용 배경색 부여
+                            # 색상 매칭
                             if is_hexa:
                                 event_bg = "#CC0000"; event_color = "#FFFFFF"; border = "1px solid #990000"
                             elif is_12:
